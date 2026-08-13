@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Pi Sensor Dashboard</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+
+/* ---------- EXISTING STYLE ---------- */
+
+.relay-card{
+    margin-top:20px;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 70px;
+  height: 34px;
+}
+
+.switch input { display:none; }
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  background-color: #ccc;
+  border-radius: 34px;
+  top:0; left:0; right:0; bottom:0;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left:4px;
+  bottom:4px;
+  background:white;
+  border-radius:50%;
+  transition:.4s;
+}
+
+input:checked + .slider {
+  background-color:#4CAF50;
+}
+
+input:checked + .slider:before {
+  transform: translateX(36px);
+}
+
+body {
+    background: linear-gradient(135deg, #4facfe, #00f2fe);
+    font-family: Arial;
+    text-align: center;
+    margin: 0;
+    color: #222;
+}
+
+.graph-container {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    flex-wrap: wrap;
+    margin-top: 30px;
+}
+
+.graph-box {
+    background: #1003;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0px 4px 15px rgba(0,0,0,0.2);
+}
+
+canvas {
+    width: 450px !important;
+    height: 220px !important;
+}
+
+/* ---------- NEW : PI HEALTH CARD ---------- */
+
+.health-box{
+    margin:30px auto;
+    width:350px;
+    background:#ffffff22;
+    padding:20px;
+    border-radius:12px;
+    box-shadow:0px 4px 15px rgba(0,0,0,0.2);
+}
+
+.health-box p{
+    margin:6px;
+    font-weight:bold;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>🌡 Raspberry Pi Sensor Dashboard</h1>
+
+<!-- RELAY CONTROL (UNCHANGED) -->
+<div class="relay-card">
+    <h2>Relay Control</h2>
+
+    <label class="switch">
+        <input type="checkbox" id="relayToggle" onchange="toggleRelay(this)">
+        <span class="slider"></span>
+    </label>
+
+    <p id="relayStatus">OFF</p>
+</div>
+
+
+<!-- GRAPHS (UNCHANGED) -->
+<div class="graph-container">
+
+    <div class="graph-box">
+        <h3>Temperature</h3>
+        <canvas id="tempChart"></canvas>
+    </div>
+
+    <div class="graph-box">
+        <h3>Humidity</h3>
+        <canvas id="humChart"></canvas>
+    </div>
+
+</div>
+
+
+<!-- ✅ NEW : PI SYSTEM HEALTH -->
+<div class="health-box">
+    <h2>Pi System Health</h2>
+
+    <p>CPU Temp: <span id="cpuTemp">--</span></p>
+    <p>CPU Usage: <span id="cpuUsage">--</span></p>
+    <p>RAM Usage: <span id="ramUsage">--</span></p>
+    <p>Disk Free: <span id="diskFree">--</span></p>
+    <p>Uptime: <span id="uptime">--</span></p>
+    <p>IP Address: <span id="ipAddr">--</span></p>
+</div>
+
+
+<script>
+
+/* ---------- RELAY CONTROL ---------- */
+
+async function toggleRelay(element){
+
+    if(element.checked){
+        await fetch('/relay/on');
+        document.getElementById("relayStatus").innerText="ON";
+    } else {
+        await fetch('/relay/off');
+        document.getElementById("relayStatus").innerText="OFF";
+    }
+}
+
+
+/* ---------- CHART SETUP (UNCHANGED) ---------- */
+
+const tempCtx = document.getElementById('tempChart').getContext('2d');
+const humCtx = document.getElementById('humChart').getContext('2d');
+
+const tempChart = new Chart(tempCtx, {
+    type: 'line',
+    data: { labels: [], datasets: [{ label:'Temperature (°C)', data:[], borderColor:'#ff4d4d', tension:0.3 }]},
+    options:{ animation:false }
+});
+
+const humChart = new Chart(humCtx, {
+    type: 'line',
+    data: { labels: [], datasets: [{ label:'Humidity (%)', data:[], borderColor:'#0099ff', tension:0.3 }]},
+    options:{ animation:false }
+});
+
+
+/* ---------- SENSOR UPDATE ---------- */
+
+async function updateData(){
+
+    const response = await fetch('/data');
+    const data = await response.json();
+
+    const time = new Date().toLocaleTimeString();
+
+    tempChart.data.labels.push(time);
+    humChart.data.labels.push(time);
+
+    tempChart.data.datasets[0].data.push(data.temperature);
+    humChart.data.datasets[0].data.push(data.humidity);
+
+    if(tempChart.data.labels.length>20){
+        tempChart.data.labels.shift();
+        humChart.data.labels.shift();
+        tempChart.data.datasets[0].data.shift();
+        humChart.data.datasets[0].data.shift();
+    }
+
+    tempChart.update();
+    humChart.update();
+}
+
+
+/* ---------- ✅ NEW : PI HEALTH UPDATE ---------- */
+
+async function updateHealth(){
+
+    const response = await fetch('/health');
+    const h = await response.json();
+
+    document.getElementById("cpuTemp").innerText = h.cpu_temp;
+    document.getElementById("cpuUsage").innerText = h.cpu_usage;
+    document.getElementById("ramUsage").innerText = h.ram;
+    document.getElementById("diskFree").innerText = h.disk;
+    document.getElementById("uptime").innerText = h.uptime;
+    document.getElementById("ipAddr").innerText = h.ip;
+}
+
+
+/* ---------- AUTO REFRESH ---------- */
+
+setInterval(updateData, 2000);
+setInterval(updateHealth, 5000);
+
+</script>
+
+</body>
+</html>
